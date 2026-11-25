@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}{{ q.title }}{% endblock %}
+{% block content %}
+<h1>{{ q.title }}</h1>
+<p class="question">{{ q.question }}</p>
+<p class="strategy"><strong>Strategy:</strong> {{ q.strategy }}</p>
+
+<form method="get" class="controls">
+  {% for p in q.params %}
+  <label>{{ p.label }}
+    {% if p.kind == "int" %}
+      <input type="number" name="{{ p.name }}" value="{{ params[p.name] }}" min="{{ p.min }}" max="{{ p.max }}">
+    {% else %}
+      <input type="text" name="{{ p.name }}" value="{{ params[p.name] }}">
+    {% endif %}
+  </label>
+  {% endfor %}
+  <label class="check"><input type="checkbox" name="fresh" value="1"> Run again (ignore cached result)</label>
+  <button type="submit" name="action" value="run">Run query</button>
+  <button type="submit" name="action" value="explain" class="secondary">Explain plan</button>
+</form>
+<p class="hint">Full-collection queries can take several seconds on the cluster. Results are cached until you tick "Run again".</p>
+
+<details class="pipeline" {{ "open" if not action }}>
+  <summary>MongoDB {{ "find (filter + projection)" if q.pipeline_lang == "find" else "aggregation pipeline" }}</summary>
+  <pre class="code">{% if q.pipeline_lang == "find" %}db.tweets.find(...){% else %}db.tweets.aggregate({% endif %}
+{{ pipeline }}{% if q.pipeline_lang != "find" %}){% endif %}</pre>
+  {% for step in q.extra_steps %}<p class="step">Then: <code>{{ step }}</code></p>{% endfor %}
+</details>
+
+{% if error %}
+<div class="error"><strong>Query failed.</strong> {{ error }}
+  {% if "memory" in error.lower() or "exceeded" in error.lower() %}
+  <br>This looks like the cluster's 100 MB per-stage memory limit (the free tier can't spill to disk).
+  {% endif %}
+</div>
+{% endif %}
+
+{% if result %}
+<section class="result">
+  <h2>Result</h2>
+  <p class="meta">
+    {% if result.from_cache %}Cached result from {{ result.at.strftime("%Y-%m-%d %H:%M:%S") }} (took {{ "%.2f"|format(result.seconds) }} s).
+    {% else %}Ran in {{ "%.2f"|format(result.seconds) }} s.{% endif %}
+    {{ result.value.rows|length }} row(s).
+  </p>
+  {% for line in result.value.summary %}<p class="summary">{{ line }}</p>{% endfor %}
+  {% if result.value.rows %}
+  <div class="table-wrap">
+  <table>
+    <tr>{% for c in result.value.columns %}<th>{{ c }}</th>{% endfor %}</tr>
+    {% for row in result.value.rows %}
+      {% set depth = result.value.indent[loop.index0] if result.value.indent else 0 %}
+      <tr class="{{ 'reply' if depth > 0 }}">
+        {% for cell in row %}
+          {# Q1 only: indent the text column by reply depth so the thread reads as a tree #}
+          {% if result.value.indent and loop.index0 == 2 %}
+            <td class="text" style="padding-left: {{ 0.6 + depth * 1.4 }}rem">{% if depth %}<span class="arrow">↳</span> {% endif %}{{ cell }}</td>
+          {% else %}
+            <td>{{ cell }}</td>
+          {% endif %}
+        {% endfor %}
+      </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if explain %}
+<section class="result">
+  <h2>Execution plan</h2>
+  <p class="meta">
+    {% if explain.from_cache %}Cached plan from {{ explain.at.strftime("%Y-%m-%d %H:%M:%S") }}.
+    {% else %}Explained in {{ "%.2f"|format(explain.seconds) }} s (executionStats runs the query).{% endif %}
+  </p>
+  {% set s = explain.summary %}
+  <table class="plan">
+    {% if s.agg_stages %}<tr><th>Pipeline stages</th><td>{{ s.agg_stages|join(" → ") }}</td></tr>{% endif %}
+    <tr><th>Winning plan</th><td>{{ s.plan_stages|join(" → ") or "–" }}</td></tr>
+    <tr><th>Indexes used</th><td>{{ s.indexes|join(", ") or "none (collection scan)" }}</td></tr>
+    {% for k, label in [("nReturned", "Documents returned"), ("totalKeysExamined", "Index keys examined"),
+                        ("totalDocsExamined", "Documents examined"), ("executionTimeMillis", "Execution time (ms)")] %}
+      {% if k in s.stats %}<tr><th>{{ label }}</th><td>{{ "{:,}".format(s.stats[k]) }}</td></tr>{% endif %}
+    {% endfor %}
+  </table>
+  <p class="hint">"Documents examined" of 0 alongside an IXSCAN means a covered query: the answer came from the index alone.</p>
+  <details><summary>Raw explain() output</summary><pre class="code">{{ explain.json }}</pre></details>
+</section>
+{% endif %}
+{% endblock %}

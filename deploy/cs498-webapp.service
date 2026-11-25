@@ -1,0 +1,19 @@
+# systemd service: keeps the site running on the GCP VM and restarts it after reboots/crashes.
+# Install:  sudo cp deploy/cs498-webapp.service /etc/systemd/system/
+#           (edit User and the paths below if your username/folder differ)
+#           sudo systemctl daemon-reload && sudo systemctl enable --now cs498-webapp
+[Unit]
+Description=CS 498 DMC Stage 3 web app (Flask + gunicorn)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=YOUR_VM_USERNAME
+WorkingDirectory=/home/YOUR_VM_USERNAME/stage3-webapp
+# 1 worker so the result cache is shared; threads let several people use it at once.
+# Long timeout because full-collection queries can take a while on the cluster.
+ExecStart=/home/YOUR_VM_USERNAME/stage3-webapp/venv/bin/gunicorn -w 1 --threads 4 --timeout 600 -b 0.0.0.0:8000 app:app
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

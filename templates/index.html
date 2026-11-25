@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Overview{% endblock %}
+{% block content %}
+<h1>Overview</h1>
+{% if error %}<div class="error"><strong>Could not reach the database.</strong> {{ error }}</div>{% endif %}
+
+<section class="cards">
+  <div class="card"><div class="label">Tweets loaded</div>
+    <div class="big">{{ "{:,}".format(count) if count is not none else "–" }}</div>
+    <div class="sub">Eurovision files 3–10 (~6.6 GB raw JSON)</div></div>
+  {% if stats %}
+  <div class="card"><div class="label">Data size</div>
+    <div class="big">{{ "%.0f"|format(stats.size_mb) }} MB</div>
+    <div class="sub">{{ "%.0f"|format(stats.storage_mb) }} MB on disk (compressed) · avg {{ stats.avg_doc_bytes }} B/tweet</div></div>
+  <div class="card"><div class="label">Indexes</div>
+    <div class="big">{{ "%.0f"|format(stats.index_mb) }} MB</div>
+    <div class="sub">{{ stats.index_sizes|length }} indexes</div></div>
+  {% endif %}
+</section>
+
+<h2>Data model</h2>
+<p>One collection, <code>tweets</code>, with one document per tweet. Only the fields the six queries need are kept.
+The user fields are stored flat on each tweet, so no query needs a join. Tweet type, hashtags and dates are
+worked out once, at load time.</p>
+
+<div class="two-col">
+  <div>
+    <h3>Example document</h3>
+    {% if sample %}<pre class="code">{{ sample }}</pre>{% else %}<p class="muted">Not available.</p>{% endif %}
+  </div>
+  <div>
+    <h3>Indexes</h3>
+    <table>
+      <tr><th>Index</th><th>Used by</th>{% if stats %}<th>Size</th>{% endif %}</tr>
+      {% set uses = {
+        "_id_": "Finding a tweet by id; Q1's $graphLookup connectFromField",
+        "screen_name_1_created_at_1": "Q1: a user's tweets, already in time order",
+        "in_reply_to_status_id_1": "Q1: replies to a tweet; Q5: all replies (partial: replies only)",
+        "country_code_1": "Q2 (partial: only tweets with a location)",
+        "user_id_1": "Q3: covered scan + name lookups; Q6 name lookups",
+        "user_verified_1_user_id_1_type_1": "Q6: covered query"} %}
+      {% for name, use in uses.items() %}
+      <tr><td><code>{{ name }}</code></td><td>{{ use }}</td>
+        {% if stats %}<td class="num">{{ "%.1f MB"|format(stats.index_sizes[name]) if name in stats.index_sizes else "–" }}</td>{% endif %}</tr>
+      {% endfor %}
+    </table>
+
+    <h3>Tweets by type</h3>
+    {% if breakdown %}
+      <table>
+        <tr><th>Type</th><th class="num">Tweets</th><th class="num">%</th></tr>
+        {% set total = breakdown.value|sum(attribute='n') %}
+        {% for row in breakdown.value %}
+        <tr><td>{{ row._id }}</td><td class="num">{{ "{:,}".format(row.n) }}</td>
+            <td class="num">{{ "%.1f"|format(100 * row.n / total) }}</td></tr>
+        {% endfor %}
+      </table>
+      <p class="meta">{{ "cached result from " ~ breakdown.at.strftime("%H:%M:%S") if breakdown.from_cache else "ran in %.2f s"|format(breakdown.seconds) }}</p>
+    {% else %}
+      <a class="button" href="{{ url_for('overview', breakdown=1) }}">Count tweets by type (full scan)</a>
+    {% endif %}
+  </div>
+</div>
+
+<h2>Queries</h2>
+<div class="query-list">
+  {% for qid, item in queries.items() %}
+  <a class="query-card" href="{{ url_for('query_page', qid=qid) }}">
+    <strong>{{ item.title }}</strong><span>{{ item.question }}</span>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}

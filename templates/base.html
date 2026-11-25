@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Eurovision 2018 Tweets{% endblock %} · CS 498 DMC</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header>
+    <a class="brand" href="{{ url_for('overview') }}">Eurovision 2018 Tweets <span>MongoDB prototype · CS 498 DMC</span></a>
+    <nav>
+      <a href="{{ url_for('overview') }}" class="{{ 'active' if request.endpoint == 'overview' }}">Overview</a>
+      {% for qid, item in queries.items() %}
+        <a href="{{ url_for('query_page', qid=qid) }}"
+           class="{{ 'active' if request.view_args and request.view_args.get('qid') == qid }}"
+           title="{{ item.title }}">{{ qid|upper }}</a>
+      {% endfor %}
+    </nav>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <footer>Team: dtoma5, fattash2, eldiare2 · MongoDB Atlas · Flask on GCP</footer>
+</body>
+</html>

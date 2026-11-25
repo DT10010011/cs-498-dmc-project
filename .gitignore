@@ -1,0 +1,14 @@
+# Secrets: the Atlas connection string with the database password. Never commit this.
+.env
+
+# Python virtual environment and caches
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Editor / OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
